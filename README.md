@@ -13,5 +13,7 @@ Modify `config.ts.template` to fit your configuration, and rename it to `config.
 
 - `<YOUR_WALLET_SECRET_KEY>`: replace to wallet private key ( i used solFlare wallet )
 - `<YOUR_RPC_URL>`: replace to your prefer one ( default : https://api.mainnet-beta.solana.com)
+- `<TEST_TARGET_POOL>` : replace to pool id that you want to test target
+- `<TARGET_POOL>` : replace to pool id that you want to main target
 
 
