@@ -73,6 +73,7 @@ export async function swapV3Pool(amount : number, isTest : boolean) {
         amountIn: inputTokenAmount.raw,
         amountOutMin: minAmountOut.raw,
         remainingAccounts,
+        computeBudgetConfig: {units: 400000, microLamports: 25000} // https://github.com/raydium-io/raydium-frontend/blob/master/src/application/swap/txSwap.ts#L54
     })
     console.log('innerTransactions',innerTransactions)
 
