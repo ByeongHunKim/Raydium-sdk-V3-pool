@@ -1,5 +1,5 @@
 import { AmmV3, ApiAmmV3PoolsItem, buildTransaction, Percent, Token, TokenAmount } from '@raydium-io/raydium-sdk'
-import { PublicKey } from '@solana/web3.js'
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { connection, ENDPOINT, RAYDIUM_MAINNET_API, wallet, wantBuildTxVersion } from '../config'
 import { getComputeBudgetConfig, getWalletTokenAccount, sendTx } from './util'
 
@@ -11,7 +11,7 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
     const inputToken = new Token(new PublicKey(baseToken), 9) // test1 token
     const outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
     const targetPool = poolId // 2G4ZBQ / CfJHKe pool
-    const inputTokenAmount = new TokenAmount(inputToken, amount * 10**9)
+    const inputTokenAmount = new TokenAmount(inputToken, amount * LAMPORTS_PER_SOL)
     const slippage = new Percent(slippageNum, 100)
     const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
 
