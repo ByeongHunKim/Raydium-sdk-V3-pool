@@ -1,19 +1,6 @@
-import {
-    SPL_ACCOUNT_LAYOUT,
-    TOKEN_PROGRAM_ID,
-    TxVersion,
-    ComputeBudgetConfig
-} from '@raydium-io/raydium-sdk';
-import {
-    Connection,
-    Keypair,
-    PublicKey,
-    SendOptions,
-    Transaction,
-    VersionedTransaction, // if not use Txversion.LEGACY, have to use this
-} from '@solana/web3.js';
+import { SPL_ACCOUNT_LAYOUT, TOKEN_PROGRAM_ID, TxVersion, ComputeBudgetConfig } from '@raydium-io/raydium-sdk';
+import { Connection, Keypair, PublicKey, SendOptions, Transaction } from '@solana/web3.js'; // if not use Txversion.LEGACY, have to use VersionedTransaction intead of Transaction above
 import axios from "axios";
-
 
 export async function sendTx(
     connection: Connection,
