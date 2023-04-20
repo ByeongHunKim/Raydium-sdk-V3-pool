@@ -2,6 +2,7 @@ import {
     SPL_ACCOUNT_LAYOUT,
     TOKEN_PROGRAM_ID,
     TxVersion,
+    ComputeBudgetConfig
 } from '@raydium-io/raydium-sdk';
 import {
     Connection,
@@ -9,8 +10,9 @@ import {
     PublicKey,
     SendOptions,
     Transaction,
-    VersionedTransaction,
+    VersionedTransaction, // if not use Txversion.LEGACY, have to use this
 } from '@solana/web3.js';
+import axios from "axios";
 
 
 export async function sendTx(
@@ -25,7 +27,7 @@ export async function sendTx(
         txids.push(await connection.sendTransaction(iTx as Transaction, [payer], options));
     }
     return txids;
-};
+}
 
 
 export async function getWalletTokenAccount(connection: Connection, wallet: PublicKey) {
@@ -36,4 +38,15 @@ export async function getWalletTokenAccount(connection: Connection, wallet: Publ
         pubkey: i.pubkey,
         accountInfo: SPL_ACCOUNT_LAYOUT.decode(i.account.data),
     }));
+}
+
+export async function getComputeBudgetConfig(): Promise<ComputeBudgetConfig | undefined> {
+    const res = await axios.get('https://solanacompass.com/api/fees')
+    const json = res.data
+    const { avg } = json?.[15] ?? {}
+    if (!avg) return undefined // fetch error
+    return {
+        units: 400000,
+        microLamports: Math.min(Math.ceil((avg * 1000000) / 400000), 25000)
+    } as ComputeBudgetConfig
 }
