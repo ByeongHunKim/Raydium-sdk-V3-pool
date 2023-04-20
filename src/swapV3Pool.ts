@@ -1,42 +1,24 @@
 import { AmmV3, ApiAmmV3PoolsItem, buildTransaction, Percent, Token, TokenAmount } from '@raydium-io/raydium-sdk'
 import { PublicKey } from '@solana/web3.js'
+import { connection, ENDPOINT, RAYDIUM_MAINNET_API, wallet, wantBuildTxVersion } from '../config'
+import { getComputeBudgetConfig, getWalletTokenAccount, sendTx } from './util'
 
-import {
-    connection,
-    ENDPOINT,
-    RAYDIUM_MAINNET_API,
-    TEST_BASE_TOKEN,
-    TEST_QUOTE_TOKEN, TEST_TARGET_POOL,
-    wallet,
-    wantBuildTxVersion
-} from '../config'
-import { getWalletTokenAccount, sendTx } from './util'
-import fetch from 'isomorphic-fetch';
+// todo 직접 만드신 axios 상대경로로 수정 필요
+import axios from "axios";
 
-export async function swapV3Pool(amount : number, isTest : boolean) {
+export async function swapV3Pool(amount : number, baseToken : string, quoteToken : string, poolId : string, slippageNum : number) {
 
-    const inputToken = new Token(new PublicKey(TEST_BASE_TOKEN), 9) // test1
-    const outputToken = new Token(new PublicKey(TEST_QUOTE_TOKEN), 9) // test2
-    const targetPool = TEST_TARGET_POOL // 2G4ZBQ / CfJHKe pool
+    const inputToken = new Token(new PublicKey(baseToken), 9) // test1 token
+    const outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
+    const targetPool = poolId // 2G4ZBQ / CfJHKe pool
     const inputTokenAmount = new TokenAmount(inputToken, amount * 10**9)
-    const slippage = new Percent(1, 100)
+    const slippage = new Percent(slippageNum, 100)
     const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
 
-    if(!isTest){
-        console.log('in progress to swap in ROA/SOL v3 POOL')
-        /*
-        const inputToken = new Token(new PublicKey(TEST_BASE_TOKEN), 9, 'Unrecognized Token', 'Unrecognized Token') // test1
-        const outputToken = new Token(new PublicKey(TEST_QUOTE_TOKEN), 9, 'Unrecognized Token', 'Unrecognized Token') // test2
-        const targetPool = TEST_TARGET_POOL // 2G4ZBQ / CfJHKe pool
-        이 세 가지가 ROA/SOL 용으로 바뀌어야 한다
-        그러면 저 세 가지 변수는 let 으로 ?
-         */
-        return [];
-    }
-
-    const ammV3Pool = (await (await fetch(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).json()).data.filter(
+    const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
         (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
     )
+    console.log('ammV3Pool',ammV3Pool)
     const { [targetPool]: ammV3PoolInfo } = await AmmV3.fetchMultiplePoolInfos({
         connection,
         poolKeys: ammV3Pool,
@@ -73,7 +55,7 @@ export async function swapV3Pool(amount : number, isTest : boolean) {
         amountIn: inputTokenAmount.raw,
         amountOutMin: minAmountOut.raw,
         remainingAccounts,
-        computeBudgetConfig: {units: 400000, microLamports: 25000} // https://github.com/raydium-io/raydium-frontend/blob/master/src/application/swap/txSwap.ts#L54
+        computeBudgetConfig: await getComputeBudgetConfig() // https://github.com/raydium-io/raydium-frontend/blob/master/src/application/swap/txSwap.ts#L54
     })
     console.log('innerTransactions',innerTransactions)
 
