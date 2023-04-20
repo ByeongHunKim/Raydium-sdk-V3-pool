@@ -6,10 +6,16 @@ import { getComputeBudgetConfig, getWalletTokenAccount, sendTx } from './util'
 // todo 직접 만드신 axios 상대경로로 수정 필요
 import axios from "axios";
 
-export async function swapV3Pool(amount : number, baseToken : string, quoteToken : string, poolId : string, slippageNum : number) {
+export async function swapV3Pool(amount : number, baseToken : string, quoteToken : string, poolId : string, slippageNum : number, isOppositeSwap : boolean) {
 
-    const inputToken = new Token(new PublicKey(baseToken), 9) // test1 token
-    const outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
+    let inputToken = new Token(new PublicKey(baseToken), 9) // test1 token
+    let outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
+
+    if(isOppositeSwap){
+        inputToken = new Token(new PublicKey(quoteToken), 9) // test1 token
+        outputToken = new Token(new PublicKey(baseToken), 9) // test2 token
+    }
+
     const targetPool = poolId // 2G4ZBQ / CfJHKe pool
     const inputTokenAmount = new TokenAmount(inputToken, amount * LAMPORTS_PER_SOL)
     const slippage = new Percent(slippageNum, 100)
@@ -72,4 +78,10 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
     return { transactionIds: transactionSignature }
 }
 
+/*
+basic swap baseToken -> quoteToken ( isOppositeSwap = false )
+- https://solscan.io/tx/2wTg9rpDgmF66BK3jgUQi8Ubcj9J8YKq3sa89S7Y7XUJBtk23hKgF3B7fFyxdEef5wWXvchbTGsCdz7KGN2FATfR
 
+opposite swap quote Token -> base Token ( isOppositeSwap = true )
+- https://solscan.io/tx/2PJYkggjVcersgz6L4VQwVsTfs44zEuj8GL1cbqCcapt8N1CqiCoYe6qZ7qWie9pKSEx61YL8dPxgrXw995uerf5
+ */
