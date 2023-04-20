@@ -18,65 +18,66 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
 
     const targetPool = poolId // 2G4ZBQ / CfJHKe pool
     const inputTokenAmount = new TokenAmount(inputToken, amount * LAMPORTS_PER_SOL)
-    const slippage = new Percent(slippageNum, 100)
+    const slippage = new Percent(slippageNum, 100) // 분모, 분자 1, 1000 -> 0.1%
     const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
 
-    const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
-        (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
-    )
-    console.log('ammV3Pool',ammV3Pool)
-    const { [targetPool]: ammV3PoolInfo } = await AmmV3.fetchMultiplePoolInfos({
-        connection,
-        poolKeys: ammV3Pool,
-        chainTime: new Date().getTime() / 1000,
-    })
+    try {
+        const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
+            (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
+        )
 
-    const tickCache = await AmmV3.fetchMultiplePoolTickArrays({
-        connection,
-        poolKeys: [ammV3PoolInfo.state],
-        batchRequest: true,
-    })
-    console.log('tickCache', tickCache)
+        const { [targetPool]: ammV3PoolInfo } = await AmmV3.fetchMultiplePoolInfos({
+            connection,
+            poolKeys: ammV3Pool,
+            chainTime: new Date().getTime() / 1000,
+        })
+
+        const tickCache = await AmmV3.fetchMultiplePoolTickArrays({
+            connection,
+            poolKeys: [ammV3PoolInfo.state],
+            batchRequest: true,
+        })
 
 
-    const { minAmountOut, remainingAccounts } = AmmV3.computeAmountOutFormat({
-        poolInfo: ammV3PoolInfo.state,
-        tickArrayCache: tickCache[targetPool],
-        amountIn: inputTokenAmount,
-        currencyOut: outputToken,
-        slippage: slippage,
-    })
-    console.log('minAmountOut', minAmountOut)
-    console.log('remainingAccounts',remainingAccounts)
+        const { minAmountOut, remainingAccounts } = AmmV3.computeAmountOutFormat({
+            poolInfo: ammV3PoolInfo.state,
+            tickArrayCache: tickCache[targetPool],
+            amountIn: inputTokenAmount,
+            currencyOut: outputToken,
+            slippage: slippage,
+        })
 
-    const { innerTransactions } = await AmmV3.makeSwapBaseInInstructionSimple({
-        connection,
-        poolInfo: ammV3PoolInfo.state,
-        ownerInfo: {
-            feePayer: wallet.publicKey,
-            wallet: wallet.publicKey,
-            tokenAccounts: walletTokenAccounts,
-        },
-        inputMint: inputTokenAmount.token.mint,
-        amountIn: inputTokenAmount.raw,
-        amountOutMin: minAmountOut.raw,
-        remainingAccounts,
-        computeBudgetConfig: await getComputeBudgetConfig() // https://github.com/raydium-io/raydium-frontend/blob/master/src/application/swap/txSwap.ts#L54
-    })
-    console.log('innerTransactions',innerTransactions)
+        const { innerTransactions } = await AmmV3.makeSwapBaseInInstructionSimple({
+            connection,
+            poolInfo: ammV3PoolInfo.state,
+            ownerInfo: {
+                feePayer: wallet.publicKey,
+                wallet: wallet.publicKey,
+                tokenAccounts: walletTokenAccounts,
+            },
+            inputMint: inputTokenAmount.token.mint,
+            amountIn: inputTokenAmount.raw,
+            amountOutMin: minAmountOut.raw, // 교환 후 최소한으로 얻어야 하는 출력 토큰의 양
+            remainingAccounts,
+            computeBudgetConfig: await getComputeBudgetConfig() // https://github.com/raydium-io/raydium-frontend/blob/master/src/application/swap/txSwap.ts#L54
+        })
 
-    const transactions = await buildTransaction({
-        connection,
-        txType: wantBuildTxVersion,
-        payer: wallet.publicKey,
-        innerTransactions: innerTransactions,
-    })
-    console.log('transactions', transactions)
+        const transactions = await buildTransaction({
+            connection,
+            txType: wantBuildTxVersion,
+            payer: wallet.publicKey,
+            innerTransactions: innerTransactions,
+        })
 
-    const transactionSignature = await sendTx(connection, wallet, wantBuildTxVersion, transactions)
-    console.log('transactionIds',transactionSignature)
-    return { transactionIds: transactionSignature }
+        const transactionSignature = await sendTx(connection, wallet, wantBuildTxVersion, transactions)
+        console.log('transactionSignature', transactionSignature)
+        return { transactionIds: transactionSignature, result: true }
+    } catch (err) {
+        console.error(err)
+        return { transactionIds: [], result: false }
+    }
 }
+
 
 /*
 basic swap baseToken -> quoteToken ( isOppositeSwap = false )
