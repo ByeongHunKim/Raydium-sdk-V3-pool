@@ -12,8 +12,8 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
     let outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
 
     if(isOppositeSwap){
-        inputToken = new Token(new PublicKey(quoteToken), 9) // test1 token
-        outputToken = new Token(new PublicKey(baseToken), 9) // test2 token
+        inputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
+        outputToken = new Token(new PublicKey(baseToken), 9) // test1 token
     }
 
     const targetPool = poolId // 2G4ZBQ / CfJHKe pool
