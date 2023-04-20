@@ -1,7 +1,7 @@
 import { AmmV3, ApiAmmV3PoolsItem, buildTransaction, Percent, Token, TokenAmount } from '@raydium-io/raydium-sdk'
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { connection, ENDPOINT, RAYDIUM_MAINNET_API, wallet, wantBuildTxVersion } from '../config'
-import { getComputeBudgetConfig, getWalletTokenAccount, sendTx } from './util'
+import { getComputeBudgetConfig, getWalletTokenAccount, sendTx, isConfimedTx } from './util'
 
 // todo 직접 만드신 axios 상대경로로 수정 필요
 import axios from "axios";
@@ -21,6 +21,7 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
     const slippage = new Percent(slippageNumerator, slippageDenominator) // 분자 numerator, 분모 denominator 1, 1000 -> 0.1%
 
     try {
+        // todo raydium backend로 요청 보내는 것은 지양해야 하는데,, 작업 필요
         const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
         const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
             (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
@@ -38,8 +39,7 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
             batchRequest: true,
         })
 
-
-        const { minAmountOut, remainingAccounts } = AmmV3.computeAmountOutFormat({
+        const { minAmountOut, remainingAccounts } = await AmmV3.computeAmountOutFormat({
             poolInfo: ammV3PoolInfo.state,
             tickArrayCache: tickCache[targetPool],
             amountIn: inputTokenAmount,
@@ -70,8 +70,10 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
         })
 
         const transactionSignature = await sendTx(connection, wallet, wantBuildTxVersion, transactions)
-        console.log('transactionSignature', transactionSignature)
-        return { transactionIds: transactionSignature, result: true }
+        const transactionId: string = transactionSignature[0];
+        const confirmedTx = await isConfimedTx(connection, transactionId)
+        console.log('Transaction result >>', transactionSignature, confirmedTx)
+        return { transactionIds: transactionSignature, result: confirmedTx}
     } catch (err) {
         console.error(err)
         return { transactionIds: [], result: false }

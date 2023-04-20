@@ -37,3 +37,8 @@ export async function getComputeBudgetConfig(): Promise<ComputeBudgetConfig | un
         microLamports: Math.min(Math.ceil((avg * 1000000) / 400000), 25000)
     } as ComputeBudgetConfig
 }
+
+export async function isConfimedTx(connection: Connection, transactionSignature: string) {
+    const confirmation = await connection.confirmTransaction(transactionSignature, "confirmed");
+    return confirmation
+}
