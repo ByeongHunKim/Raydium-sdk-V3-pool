@@ -6,7 +6,7 @@ import { getComputeBudgetConfig, getWalletTokenAccount, sendTx } from './util'
 // todo 직접 만드신 axios 상대경로로 수정 필요
 import axios from "axios";
 
-export async function swapV3Pool(amount : number, baseToken : string, quoteToken : string, poolId : string, slippageNum : number, isOppositeSwap : boolean) {
+export async function swapV3Pool(amount : number, baseToken : string, quoteToken : string, poolId : string, slippageNumerator : number, slippageDenominator : number, isOppositeSwap : boolean) {
 
     let inputToken = new Token(new PublicKey(baseToken), 9) // test1 token
     let outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
@@ -18,10 +18,10 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
 
     const targetPool = poolId // 2G4ZBQ / CfJHKe pool
     const inputTokenAmount = new TokenAmount(inputToken, amount * LAMPORTS_PER_SOL)
-    const slippage = new Percent(slippageNum, 100) // 분모, 분자 1, 1000 -> 0.1%
-    const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
+    const slippage = new Percent(slippageNumerator, slippageDenominator) // 분자 numerator, 분모 denominator 1, 1000 -> 0.1%
 
     try {
+        const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
         const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
             (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
         )
