@@ -2,6 +2,7 @@ import { AmmV3, ApiAmmV3PoolsItem, buildTransaction, Percent, Token, TokenAmount
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { connection, ENDPOINT, RAYDIUM_MAINNET_API, wallet, wantBuildTxVersion } from '../config'
 import { getComputeBudgetConfig, getWalletTokenAccount, sendTx, isConfimedTx } from './util'
+import pooldata from "./poolData.json"
 
 // todo 직접 만드신 axios 상대경로로 수정 필요
 import axios from "axios";
@@ -23,9 +24,12 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
     try {
         // todo raydium backend로 요청 보내는 것은 지양해야 하는데,, 작업 필요
         const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
-        const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
-            (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
-        )
+
+        // const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
+        //     (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
+        // )
+
+        const ammV3Pool = pooldata as ApiAmmV3PoolsItem[]
 
         const { [targetPool]: ammV3PoolInfo } = await AmmV3.fetchMultiplePoolInfos({
             connection,
@@ -39,6 +43,9 @@ export async function swapV3Pool(amount : number, baseToken : string, quoteToken
             batchRequest: true,
         })
 
+        // remainingAccounts : ET9EBXyh4Bs1A6w59LMsRm3hgQmv3PhE4TTABAqf2yKN -> Tick Array account address
+        // remaining accounts 안에 rent비 지불하고 공간확보 -> pool의 tick data를 가지고 있는 것 같음
+        // tickArrayCache -> tickCache 객체에서 targetPool 값을 키로 가지고 있는 tick 데이터를 의미
         const { minAmountOut, remainingAccounts } = await AmmV3.computeAmountOutFormat({
             poolInfo: ammV3PoolInfo.state,
             tickArrayCache: tickCache[targetPool],
