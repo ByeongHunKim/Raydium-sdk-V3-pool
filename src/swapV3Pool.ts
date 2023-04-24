@@ -1,97 +1,96 @@
-import { AmmV3, ApiAmmV3PoolsItem, buildTransaction, Percent, Token, TokenAmount } from '@raydium-io/raydium-sdk'
-import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
-import { connection, ENDPOINT, RAYDIUM_MAINNET_API, wallet, wantBuildTxVersion } from '../config'
+import { AmmV3, ApiAmmV3PoolsItem, buildTransaction, Percent, Token, TokenAmount, TxVersion } from '@raydium-io/raydium-sdk'
+import {Connection, Keypair, PublicKey} from '@solana/web3.js'
+import { connection, owner } from '../config'
 import { getComputeBudgetConfig, getWalletTokenAccount, sendTx, isConfimedTx } from './util'
-import pooldata from "./poolData.json"
+import poolData from './poolData.json'
+import { createWrappedSolAccount } from "./findWrappedSol";
+import { unWrapSol } from "./unWrappSol"
 
-// todo 직접 만드신 axios 상대경로로 수정 필요
-import axios from "axios";
+export async function swapV3Pool(connection: Connection, owner : Keypair, amount : number, baseToken : Token, quoteToken : Token , poolId : string, slippage : Percent, isOppositeSwap : boolean) {
 
-export async function swapV3Pool(amount : number, baseToken : string, quoteToken : string, poolId : string, slippageNumerator : number, slippageDenominator : number, isOppositeSwap : boolean) {
+    const { inputToken, outputToken } = isOppositeSwap ? ({ inputToken: quoteToken, outputToken: baseToken }) : ({ inputToken: baseToken, outputToken: quoteToken })
 
-    let inputToken = new Token(new PublicKey(baseToken), 9) // test1 token
-    let outputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
+    const wrappedSolAccount =  await createWrappedSolAccount(amount)
+    console.log('wrappedSolAccount', wrappedSolAccount)
 
-    if(isOppositeSwap){
-        inputToken = new Token(new PublicKey(quoteToken), 9) // test2 token
-        outputToken = new Token(new PublicKey(baseToken), 9) // test1 token
+    const targetPool = poolId
+
+    const inputTokenAmount = new TokenAmount(inputToken, amount * 10**inputToken.decimals)
+
+    const walletTokenAccounts = await getWalletTokenAccount(connection, owner.publicKey)
+
+    const ammV3Pool = poolData as ApiAmmV3PoolsItem[]
+
+    const { [targetPool]: ammV3PoolInfo} = await AmmV3.fetchMultiplePoolInfos({
+        connection,
+        poolKeys: ammV3Pool,
+        chainTime: new Date().getTime() / 1000,
+    })
+
+    if (!ammV3PoolInfo) {
+        throw new Error(`TargetPool doesn't exist. Check your TargetPool id ${poolId}`)
     }
 
-    const targetPool = poolId // 2G4ZBQ / CfJHKe pool
-    const inputTokenAmount = new TokenAmount(inputToken, amount * LAMPORTS_PER_SOL)
-    const slippage = new Percent(slippageNumerator, slippageDenominator) // 분자 numerator, 분모 denominator 1, 1000 -> 0.1%
+    const tickCache = await AmmV3.fetchMultiplePoolTickArrays({
+        connection,
+        poolKeys: [ammV3PoolInfo.state],
+        batchRequest: true,
+    })
 
-    try {
-        // todo raydium backend로 요청 보내는 것은 지양해야 하는데,, 작업 필요
-        const walletTokenAccounts = await getWalletTokenAccount(connection, wallet.publicKey)
+    const { minAmountOut, remainingAccounts } = await AmmV3.computeAmountOutFormat({
+        poolInfo: ammV3PoolInfo.state,
+        tickArrayCache: tickCache[targetPool],
+        amountIn: inputTokenAmount,
+        currencyOut: outputToken,
+        slippage: slippage,
+    })
 
-        // const ammV3Pool = (await axios.get(ENDPOINT + RAYDIUM_MAINNET_API.ammV3Pools)).data.data.filter(
-        //     (pool: ApiAmmV3PoolsItem) => pool.id === targetPool
-        // )
+    const { innerTransactions } = await AmmV3.makeSwapBaseInInstructionSimple({
+        connection,
+        poolInfo: ammV3PoolInfo.state,
+        ownerInfo: {
+            feePayer: owner.publicKey,
+            wallet: owner.publicKey,
+            tokenAccounts: walletTokenAccounts,
+        },
+        inputMint: inputTokenAmount.token.mint,
+        amountIn: inputTokenAmount.raw,
+        amountOutMin: minAmountOut.raw,
+        remainingAccounts,
+        computeBudgetConfig: await getComputeBudgetConfig()
+    })
 
-        const ammV3Pool = pooldata as ApiAmmV3PoolsItem[]
+    innerTransactions[0].instructions = [innerTransactions[0].instructions[0], innerTransactions[0].instructions[1], ...wrappedSolAccount, innerTransactions[0].instructions[2]]
 
-        const { [targetPool]: ammV3PoolInfo } = await AmmV3.fetchMultiplePoolInfos({
-            connection,
-            poolKeys: ammV3Pool,
-            chainTime: new Date().getTime() / 1000,
-        })
+    const transactions = await buildTransaction({
+        connection,
+        txType: TxVersion.LEGACY,
+        payer: owner.publicKey,
+        innerTransactions: innerTransactions,
+    })
 
-        const tickCache = await AmmV3.fetchMultiplePoolTickArrays({
-            connection,
-            poolKeys: [ammV3PoolInfo.state],
-            batchRequest: true,
-        })
+    const transactionSignature = await sendTx(connection, owner, TxVersion.LEGACY, transactions)
+    console.log('transactionSignature',transactionSignature)
+    const transactionId: string = transactionSignature[0];
+    const confirmedTx = await isConfimedTx(connection, transactionId)
+    const unWrappingSol = await unWrapSol()
+    console.log('unWrappingSol',unWrappingSol)
+    return { transactionIds: transactionSignature, result: confirmedTx}
 
-        // remainingAccounts : ET9EBXyh4Bs1A6w59LMsRm3hgQmv3PhE4TTABAqf2yKN -> Tick Array account address
-        // remaining accounts 안에 rent비 지불하고 공간확보 -> pool의 tick data를 가지고 있는 것 같음
-        // tickArrayCache -> tickCache 객체에서 targetPool 값을 키로 가지고 있는 tick 데이터를 의미
-        const { minAmountOut, remainingAccounts } = await AmmV3.computeAmountOutFormat({
-            poolInfo: ammV3PoolInfo.state,
-            tickArrayCache: tickCache[targetPool],
-            amountIn: inputTokenAmount,
-            currencyOut: outputToken,
-            slippage: slippage,
-        })
-
-        const { innerTransactions } = await AmmV3.makeSwapBaseInInstructionSimple({
-            connection,
-            poolInfo: ammV3PoolInfo.state,
-            ownerInfo: {
-                feePayer: wallet.publicKey,
-                wallet: wallet.publicKey,
-                tokenAccounts: walletTokenAccounts,
-            },
-            inputMint: inputTokenAmount.token.mint,
-            amountIn: inputTokenAmount.raw,
-            amountOutMin: minAmountOut.raw, // 교환 후 최소한으로 얻어야 하는 출력 토큰의 양
-            remainingAccounts,
-            computeBudgetConfig: await getComputeBudgetConfig() // https://github.com/raydium-io/raydium-frontend/blob/master/src/application/swap/txSwap.ts#L54
-        })
-
-        const transactions = await buildTransaction({
-            connection,
-            txType: wantBuildTxVersion,
-            payer: wallet.publicKey,
-            innerTransactions: innerTransactions,
-        })
-
-        const transactionSignature = await sendTx(connection, wallet, wantBuildTxVersion, transactions)
-        const transactionId: string = transactionSignature[0];
-        const confirmedTx = await isConfimedTx(connection, transactionId)
-        console.log('Transaction result >>', transactionSignature, confirmedTx)
-        return { transactionIds: transactionSignature, result: confirmedTx}
-    } catch (err) {
-        console.error(err)
-        return { transactionIds: [], result: false }
-    }
 }
 
+const slippage = new Percent(1, 1000)
 
-/*
-basic swap baseToken -> quoteToken ( isOppositeSwap = false )
-- https://solscan.io/tx/2wTg9rpDgmF66BK3jgUQi8Ubcj9J8YKq3sa89S7Y7XUJBtk23hKgF3B7fFyxdEef5wWXvchbTGsCdz7KGN2FATfR
+export function idToToken(mintAddress : string, decimal : number) : Token {
+    return new Token(new PublicKey(mintAddress), decimal)
+}
 
-opposite swap quote Token -> base Token ( isOppositeSwap = true )
-- https://solscan.io/tx/2PJYkggjVcersgz6L4VQwVsTfs44zEuj8GL1cbqCcapt8N1CqiCoYe6qZ7qWie9pKSEx61YL8dPxgrXw995uerf5
- */
+const baseToken = idToToken("2G4ZBQH8zHVpyo76CZJJVCPJZ1K2XCkvswfzmyvj5mmJ", 9)
+
+const quoteToken = idToToken("CfJHKeQgNQUrscsNmCL27Vfeh3YVZrSY3rcGhGMc9wcJ", 9)
+
+const solToken = idToToken("So11111111111111111111111111111111111111112", 9)
+console.log('solToken',solToken)
+
+swapV3Pool(connection, owner, 0.0001, solToken, baseToken, "99xdHQhPF5qwHh8kvWY71DU78en2aXGBMRto5t9dXZWq", slippage ,false)
+
